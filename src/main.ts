@@ -43,14 +43,62 @@ const Constants = {
     TICK_RATE_MS: 500, // Might need to change this!
 } as const;
 
+// creating a type called DigitBank, holding an array of numbers
+type DigitBank = ReadonlyArray<number>;
+
 // State processing
+// every state has a digitBank
 type State = Readonly<{
+    digitBank: DigitBank;
     gameEnd: boolean;
 }>;
 
+type GameEvent = Readonly<{
+    type: "TOGGLE_BIT";
+    index: number;
+}>;
+
 const initialState: State = {
+    digitBank: [0, 0, 0, 0, 0, 0, 0, 0],
     gameEnd: false,
 };
+
+const reduceState = (
+    state: State,
+    event: GameEvent): State => {
+        switch(event.type) {
+            case "TOGGLE_BIT":
+                return {
+                    ...state,
+                    digitBank: toggleDigit(
+                        state.digitBank,
+                        event.index
+                    ),
+                };
+        }
+    };
+
+const keyboard$ = fromEvent<KeyboardEvent>( document, "keydown");
+
+const digitEvent$ = keyboard$.pipe(
+    filter(event => /^[1-8]$/.test(event.key)),
+    map(event => ({
+        type: "TOGGLE_BIT" as const,
+        index: Number(event.key) - 1,
+    })),
+);
+/**
+ * Toggles the digit bank based on user's request
+ *
+ * @param digitBank
+ * @param index
+ * @returns DigitBank
+ */
+const toggleDigit = (
+    digitBank: DigitBank,
+    index: number
+    ): DigitBank =>
+        digitBank.map((digit, i) => i === index ? 1 - digit : digit);
 
 /**
  * Updates the state by proceeding with one time step.
@@ -171,18 +219,18 @@ const render = (): ((s: State) => void) => {
     };
 };
 
-export const state$ = (): Observable<State> => {
-    /** Determines the rate of time steps */
-    const tick$ = interval(Constants.TICK_RATE_MS);
+// export const state$ = (): Observable<State> => {
+//     /** Determines the rate of time steps */
+//     const tick$ = interval(Constants.TICK_RATE_MS);
 
-    return tick$.pipe(scan((s: State) => ({ gameEnd: false }), initialState));
-};
+//     return tick$.pipe(scan((s: State) => ({ gameEnd: false }), initialState));
+// };
 
 // The following simply runs your main function on window load.  Make sure to leave it in place.
 // You should not need to change this, beware if you are.
-if (typeof window !== "undefined") {
-    // Observable: wait for first user click
-    const click$ = fromEvent(document.body, "mousedown").pipe(take(1));
+// if (typeof window !== "undefined") {
+//     // Observable: wait for first user click
+//     const click$ = fromEvent(document.body, "mousedown").pipe(take(1));
 
-    click$.pipe(switchMap(() => state$())).subscribe(render());
-}
+//     click$.pipe(switchMap(() => state$())).subscribe(render());
+// }
