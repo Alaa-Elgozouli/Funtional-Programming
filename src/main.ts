@@ -24,6 +24,7 @@ import {
     scan,
     switchMap,
     take,
+    merge,
 } from "rxjs";
 
 /** Constants */
@@ -46,22 +47,48 @@ const Constants = {
 // creating a type called DigitBank, holding an array of numbers
 type DigitBank = ReadonlyArray<number>;
 
+type FallingTargetView = Readonly<{
+    id: number;
+    value: number;  // the base-16 value the player must match
+    y: number;  // current vertical position
+}>;
+
+type GameEvent =
+    | Readonly<{ type : "TOGGLE_BIT"; index: number }>
+    | Readonly<{ type: "TICK" }>;
+
+
 // State processing
 // every state has a digitBank
 type State = Readonly<{
     digitBank: DigitBank;
+    allCurrentTargetsInPlay: ReadonlyArray<FallingTargetView>;
+    healthReserve: number;
+    score: number;
     gameEnd: boolean;
-}>;
-
-type GameEvent = Readonly<{
-    type: "TOGGLE_BIT";
-    index: number;
 }>;
 
 const initialState: State = {
     digitBank: [0, 0, 0, 0, 0, 0, 0, 0],
+    allCurrentTargetsInPlay: [],
+    healthReserve: 3,
+    score: 0,
     gameEnd: false,
 };
+
+const keyToggle$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
+    filter(event => /^[1-8]$/.test(event.key)),
+    map(event => ({ type: "TOGGLE_BIT" as const, index: Number(event.key) - 1})),
+);
+
+const gameTick$: Observable<GameEvent> = interval(Constants.TICK_RATE_MS).pipe(
+    map(() => ({ type: "TICK" as const })),
+);
+
+const event$: Observable<GameEvent> = merge(
+    keyToggle$,
+    gameTick$,
+);
 
 const reduceState = (
     state: State,
@@ -75,18 +102,11 @@ const reduceState = (
                         event.index
                     ),
                 };
+            case "TICK":
+                return tick(state);
         }
     };
 
-const keyboard$ = fromEvent<KeyboardEvent>( document, "keydown");
-
-const digitEvent$ = keyboard$.pipe(
-    filter(event => /^[1-8]$/.test(event.key)),
-    map(event => ({
-        type: "TOGGLE_BIT" as const,
-        index: Number(event.key) - 1,
-    })),
-);
 /**
  * Toggles the digit bank based on user's request
  *
