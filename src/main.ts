@@ -50,6 +50,7 @@ type DigitBank = ReadonlyArray<number>;
 type FallingTargetView = Readonly<{
     id: number;
     value: number;  // the base-16 value the player must match
+    x: number;
     y: number;  // current vertical position
 }>;
 
@@ -57,6 +58,13 @@ type GameEvent =
     | Readonly<{ type : "TOGGLE_BIT"; index: number }>
     | Readonly<{ type: "TICK" }>;
 
+const MIN_SPAWN_DELAY_MS = 1000;
+const MAX_SPAWN_DELAY_MS = 3000;
+
+const randomSpawnDelayTicks = (): number => {
+        const delayMs = MIN_SPAWN_DELAY_MS + Math.random() * (MAX_SPAWN_DELAY_MS - MIN_SPAWN_DELAY_MS);
+        return Math.ceil(delayMs / Constants.TICK_RATE_MS);
+}
 
 // State processing
 // every state has a digitBank
@@ -66,6 +74,8 @@ type State = Readonly<{
     healthReserve: number;
     score: number;
     gameEnd: boolean;
+    spawnDelayTicks: number;
+    nextTargetId: number;
 }>;
 
 const initialState: State = {
@@ -74,6 +84,8 @@ const initialState: State = {
     healthReserve: 3,
     score: 0,
     gameEnd: false,
+    spawnDelayTicks: randomSpawnDelayTicks(),
+    nextTargetId: 0,
 };
 
 const keyToggle$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
@@ -111,45 +123,13 @@ export const state$: Observable<State> = event$.pipe(
     scan(reduceState, initialState),
 )
 
-const HARDCODED_TARGETS: ReadonlyArray<number> = [13, 42, 255, 7, 128];
 const FALL_SPEED = 15;
 const CHECK_LINE_Y = Viewport.CANVAS_HEIGHT - 50;
 
+const randomTargetValue = (): number => Math.floor(Math.random() * 256);
+
 const digitBankToNumber = (digitBank: DigitBank): number => digitBank.reduce((acc, bit) => acc * 2 + bit, 0);
 
-const nextTargetValue = (targetSoFar: number): number => HARDCODED_TARGETS[targetSoFar % HARDCODED_TARGETS.length];
-
-const spawnTarget = (s: State): State => ({
-    ...s,
-    allCurrentTargetsInPlay: [{
-        id: s.score,
-        value: nextTargetValue(s.score),
-        y:0
-    },]
-});
-
-const advanceTarget = (s: State, target: FallingTargetView): State => {
-    const moved = {
-        ...target,
-        y: target.y + FALL_SPEED
-    };
-
-    const resolved = digitBankToNumber(s.digitBank) === moved.value;
-
-    return moved.y < CHECK_LINE_Y ? { ...s, allCurrentTargetsInPlay: [moved] } : resolved ? { ...s, allCurrentTargetsInPlay: [], score: s.score + 1} : { ...s, gameEnd: true};
-};
-
-/**
- * Updates the state by proceeding with one time step.
- *
- * @param s Current state
- * @returns Updated state
- */
-const tick = (s: State): State => {
-    const [exiting] = s.allCurrentTargetsInPlay;
-
-    return s.gameEnd ? s : exiting === undefined ? spawnTarget(s) : advanceTarget(s, exiting)
-};
 /**
  * Toggles the digit bank based on user's request
  *
@@ -163,6 +143,60 @@ const toggleDigit = (
     ): DigitBank =>
         digitBank.map((digit, i) => i === index ? 1 - digit : digit);
 
+const moveAllTargets = (targets: ReadonlyArray<FallingTargetView>): ReadonlyArray<FallingTargetView> => targets.map(t => ({
+    ...t,
+    y: t.y + FALL_SPEED }));
+
+/**
+ * The "lowest" unresolved target is the one furthest down the screen
+ * (largest y) — that's the only one the player's digitBank is compared
+ * against; others above it are ignored until it's resolved.
+ */
+const lowestTarget = (targets: ReadonlyArray<FallingTargetView>): FallingTargetView | undefined => targets.reduce<FallingTargetView | undefined>(
+    (lowest, t) => (lowest === undefined || t.y > lowest.y ? t : lowest), undefined,
+);
+
+const resolveIfAtCheckLine = (s: State): State => {
+    const target = lowestTarget(s.allCurrentTargetsInPlay);
+
+    if (target === undefined || target.y < CHECK_LINE_Y) return s;
+
+    const correct = digitBankToNumber(s.digitBank) === target.value;
+    const remaining = s.allCurrentTargetsInPlay.filter(t => t.id !== target.id);
+
+    return correct ? { ...s, allCurrentTargetsInPlay: remaining, score: s.score + 1} : { ...s, gameEnd: true};
+};
+
+const spawnIfDue = (s: State): State =>
+    s.spawnDelayTicks > 0
+    ? { ...s, spawnDelayTicks: s.spawnDelayTicks - 1}
+    : {
+    ...s,
+    allCurrentTargetsInPlay: [
+        ...s.allCurrentTargetsInPlay,
+        {
+            id: s.nextTargetId,
+            value: randomTargetValue(),
+            x: Math.random() * (Viewport.CANVAS_WIDTH - Target.WIDTH),
+            y: 0,
+        },
+    ],
+    nextTargetId: s.nextTargetId + 1,
+    spawnDelayTicks: randomSpawnDelayTicks(),
+};
+
+/**
+ * Updates the state by proceeding with one time step.
+ *
+ * @param s Current state
+ * @returns Updated state
+ */
+const tick = (s: State): State => {
+    if (s.gameEnd) return s;
+    const moved = { ...s, allCurrentTargetsInPlay: moveAllTargets(s.allCurrentTargetsInPlay) };
+    const resolved = resolveIfAtCheckLine(moved);
+    return spawnIfDue(resolved);
+};
 // Rendering (side effects)
 
 /**
@@ -234,7 +268,7 @@ const render = (): ((s: State) => void) => {
         // Draw each falling currently in play
         s.allCurrentTargetsInPlay.forEach(target => {
             const rect = createSvgElement(svg.namespaceURI, "rect", {
-            x: `${Viewport.CANVAS_WIDTH / 2 - Target.WIDTH / 2}`,
+            x: `${target.x}`,
             y: `${target.y}`,
             width: `${Target.WIDTH}`,
             height: `${Target.HEIGHT}`,
@@ -245,7 +279,7 @@ const render = (): ((s: State) => void) => {
             "data-fb-target-id": `${target.id}`,
         });
         const targetText = createSvgElement(svg.namespaceURI, "text", {
-            x: `${Viewport.CANVAS_WIDTH / 2}`,
+            x: `${target.x + Target.WIDTH / 2}`,
             y: `${target.y + Target.HEIGHT / 2 + 8}`,
             "text-anchor": "middle",
             "font-family": "monospace",
