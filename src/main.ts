@@ -107,6 +107,9 @@ const reduceState = (
         }
     };
 
+export const state$: Observable<State> = event$.pipe(
+    scan(reduceState, initialState),
+)
 /**
  * Toggles the digit bank based on user's request
  *
@@ -182,6 +185,7 @@ const render = (): ((s: State) => void) => {
     svg.setAttribute(
         "viewBox",
         `0 0 ${Viewport.CANVAS_WIDTH} ${Viewport.CANVAS_HEIGHT}`,
+
     );
     /**
      * Renders the current state to the canvas.
@@ -191,39 +195,47 @@ const render = (): ((s: State) => void) => {
      * @param s Current state
      */
     return (s: State) => {
-        // Draw a static falling target as a demonstration
-        const target = createSvgElement(svg.namespaceURI, "rect", {
+
+        // clear everything from the previous frame before drawing the new one
+        svg.replaceChildren();
+
+        // Draw each falling currently in play
+        s.allCurrentTargetsInPlay.forEach(target => {
+            const rect = createSvgElement(svg.namespaceURI, "rect", {
             x: `${Viewport.CANVAS_WIDTH / 2 - Target.WIDTH / 2}`,
-            y: "40",
+            y: `${target.y}`,
             width: `${Target.WIDTH}`,
             height: `${Target.HEIGHT}`,
             rx: "6",
             fill: "white",
             stroke: "black",
             "stroke-width": "2",
+            "data-fb-target-id": `${target.id}`,
         });
         const targetText = createSvgElement(svg.namespaceURI, "text", {
             x: `${Viewport.CANVAS_WIDTH / 2}`,
-            y: `${40 + Target.HEIGHT / 2 + 8}`,
+            y: `${target.y + Target.HEIGHT / 2 + 8}`,
             "text-anchor": "middle",
             "font-family": "monospace",
             fill: "black",
         });
-        targetText.textContent = "13";
-        svg.appendChild(target);
+        targetText.textContent = target.value.toString(16).toUpperCase();
+        svg.appendChild(rect);
         svg.appendChild(targetText);
+    });
 
         // Draw the row of digit toggles as a demonstration
         const digitWidth = Viewport.CANVAS_WIDTH / Constants.DIGIT_COUNT;
-        Array.from({ length: Constants.DIGIT_COUNT }).forEach((_, i) => {
-            const bit = createSvgElement(svg.namespaceURI, "rect", {
+        s.digitBank.forEach((bit, i) => {
+            const box = createSvgElement(svg.namespaceURI, "rect", {
                 x: `${i * digitWidth + 4}`,
                 y: `${Viewport.CANVAS_HEIGHT - 50}`,
                 width: `${digitWidth - 8}`,
                 height: "40",
-                fill: "#ef9a9a",
+                fill: bit === 1 ? "#a5d6a7" : "#ef9a9a",
                 stroke: "black",
                 "stroke-width": "2",
+                "data-fb-bit-index": `${i}`,
             });
             const bitText = createSvgElement(svg.namespaceURI, "text", {
                 x: `${i * digitWidth + digitWidth / 2}`,
@@ -232,24 +244,19 @@ const render = (): ((s: State) => void) => {
                 "font-family": "monospace",
                 fill: "black",
             });
-            bitText.textContent = "0";
-            svg.appendChild(bit);
+            bitText.textContent = `${bit}`;
+            svg.appendChild(box);
             svg.appendChild(bitText);
         });
     };
 };
 
-// export const state$ = (): Observable<State> => {
-//     /** Determines the rate of time steps */
-//     const tick$ = interval(Constants.TICK_RATE_MS);
-
-//     return tick$.pipe(scan((s: State) => ({ gameEnd: false }), initialState));
-// };
-
 // The following simply runs your main function on window load.  Make sure to leave it in place.
 // You should not need to change this, beware if you are.
-// if (typeof window !== "undefined") {
-//     // Observable: wait for first user click
+if (typeof window !== "undefined") {
+    state$.subscribe(render());
+}
+    // Observable: wait for first user click
 //     const click$ = fromEvent(document.body, "mousedown").pipe(take(1));
 
 //     click$.pipe(switchMap(() => state$())).subscribe(render());
