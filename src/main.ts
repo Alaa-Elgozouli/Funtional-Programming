@@ -110,6 +110,46 @@ const reduceState = (
 export const state$: Observable<State> = event$.pipe(
     scan(reduceState, initialState),
 )
+
+const HARDCODED_TARGETS: ReadonlyArray<number> = [13, 42, 255, 7, 128];
+const FALL_SPEED = 15;
+const CHECK_LINE_Y = Viewport.CANVAS_HEIGHT - 50;
+
+const digitBankToNumber = (digitBank: DigitBank): number => digitBank.reduce((acc, bit) => acc * 2 + bit, 0);
+
+const nextTargetValue = (targetSoFar: number): number => HARDCODED_TARGETS[targetSoFar % HARDCODED_TARGETS.length];
+
+const spawnTarget = (s: State): State => ({
+    ...s,
+    allCurrentTargetsInPlay: [{
+        id: s.score,
+        value: nextTargetValue(s.score),
+        y:0
+    },]
+});
+
+const advanceTarget = (s: State, target: FallingTargetView): State => {
+    const moved = {
+        ...target,
+        y: target.y + FALL_SPEED
+    };
+
+    const resolved = digitBankToNumber(s.digitBank) === moved.value;
+
+    return moved.y < CHECK_LINE_Y ? { ...s, allCurrentTargetsInPlay: [moved] } : resolved ? { ...s, allCurrentTargetsInPlay: [], score: s.score + 1} : { ...s, gameEnd: true};
+};
+
+/**
+ * Updates the state by proceeding with one time step.
+ *
+ * @param s Current state
+ * @returns Updated state
+ */
+const tick = (s: State): State => {
+    const [exiting] = s.allCurrentTargetsInPlay;
+
+    return s.gameEnd ? s : exiting === undefined ? spawnTarget(s) : advanceTarget(s, exiting)
+};
 /**
  * Toggles the digit bank based on user's request
  *
@@ -122,14 +162,6 @@ const toggleDigit = (
     index: number
     ): DigitBank =>
         digitBank.map((digit, i) => i === index ? 1 - digit : digit);
-
-/**
- * Updates the state by proceeding with one time step.
- *
- * @param s Current state
- * @returns Updated state
- */
-const tick = (s: State) => s;
 
 // Rendering (side effects)
 
@@ -260,4 +292,4 @@ if (typeof window !== "undefined") {
 //     const click$ = fromEvent(document.body, "mousedown").pipe(take(1));
 
 //     click$.pipe(switchMap(() => state$())).subscribe(render());
-// }
+// } */
