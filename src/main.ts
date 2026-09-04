@@ -15,6 +15,7 @@
 // men with hats
 
 // import { stat } from "fs";
+import { G } from "vitest/dist/chunks/reporters.d.BFLkQcL6.js";
 import "./style.css";
 
 import {
@@ -62,7 +63,8 @@ type GameEvent =
     | Readonly<{ type : "TOGGLE_BIT"; index: number }>
     | Readonly<{ type: "TICK" }>
     | Readonly<{ type: "RESTART" }>
-    | Readonly<{ type: "TOGGLE_HINT" }>;
+    | Readonly<{ type: "TOGGLE_HINT" }>
+    | Readonly<{ type: "TOGGLE_PAUSE" }>;
 
 const MIN_SPAWN_DELAY_MS = 1000;
 const MAX_SPAWN_DELAY_MS = 3000;
@@ -91,6 +93,7 @@ type State = Readonly<{
     nextTargetId: number;
     ticksElapsed: number;   // tracks how long the game's been running through checking how many tick events have occurred
     showHint: boolean;
+    isPaused: boolean;
 }>;
 
 const BASE_FALL_SPEED = 3;  // how fast targets fall at the start of the game (tick 0)
@@ -115,6 +118,7 @@ const initialState: State = {
     nextTargetId: 0,
     ticksElapsed: 0,
     showHint: false,
+    isPaused: false,
 };
 
 const toggleHint$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
@@ -125,6 +129,11 @@ const toggleHint$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "k
 const keyToggle$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
     filter(event => /^[1-8]$/.test(event.key)),
     map(event => ({ type: "TOGGLE_BIT" as const, index: Number(event.key) - 1})),
+);
+
+const togglePauseKey$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
+    filter(event => event.key.toLowerCase() === "p"),
+    map(() => ({ type: "TOGGLE_PAUSE" as const })),
 );
 
 const gameTick$: Observable<GameEvent> = interval(Constants.TICK_RATE_MS).pipe(
