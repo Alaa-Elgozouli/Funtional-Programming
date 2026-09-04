@@ -403,6 +403,18 @@ const render = (): ((s: State) => void) => {
         scoreText.textContent = `Score: ${s.score}`;
         svg.appendChild(scoreText);
 
+        //restart instructions
+        const restartPrompt = createSvgElement(svg.namespaceURI, "text", {
+            x: `${Viewport.CANVAS_WIDTH - 10}`,
+            y: "20",
+            "text-anchor": "end",   // text grows leftward from x
+            "font-family": "monospace",
+            "font-size": "12",
+            fill: "blue",
+        });
+        restartPrompt.textContent = "Press R to restart";
+        svg.appendChild(restartPrompt);
+
         // hint prompt
         const hintPrompt = createSvgElement(svg.namespaceURI, "text", {
             x: "10",
