@@ -136,6 +136,12 @@ const togglePauseKey$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document
     map(() => ({ type: "TOGGLE_PAUSE" as const })),
 );
 
+const pauseButtonClick$: Observable<GameEvent> = fromEvent<MouseEvent>(document.querySelector("#svgCanvas") as SVGSVGElement, "click").pipe(
+    map(event => (event.target as SVGAElement).getAttribute("data-fb-pause-button")),
+    filter((clicked): clicked is string => clicked !== null),
+    map(() => ({ type: "TOGGLE_PAUSE" as const })),
+);
+
 const gameTick$: Observable<GameEvent> = interval(Constants.TICK_RATE_MS).pipe(
     map(() => ({ type: "TICK" as const })),
 );
@@ -159,6 +165,8 @@ const event$: Observable<GameEvent> = merge(
     restart$,
     toggleHint$,
     digitClick$,
+    pauseButtonClick$,
+    togglePauseKey$,
 );
 
 const reduceState = (
@@ -185,12 +193,17 @@ const reduceState = (
                 return {
                     ...state,
                     showHint: !state.showHint };
+
+            case "TOGGLE_PAUSE":
+                return {
+                    ...state,
+                    isPaused: !state.isPaused
+                };
         };
     };
 
-export const state$: Observable<State> = event$.pipe(
-    scan(reduceState, initialState),
-)
+export const state$ = (): Observable<State> =>
+    event$.pipe(scan(reduceState, initialState));
 
 const CHECK_LINE_Y = Viewport.CANVAS_HEIGHT - 50;
 
@@ -291,7 +304,7 @@ const spawnIfDue = (s: State): State =>
  * @returns Updated state
  */
 const tick = (s: State): State => {
-    if (s.gameEnd) return s;
+    if (s.gameEnd || s.isPaused) return s;
 
     const speed = currentFallSpeed(s.ticksElapsed);
 
@@ -479,13 +492,52 @@ const render = (): ((s: State) => void) => {
             debugText.textContent = `Current Value: ${digitBankToNumber(s.digitBank)}`;
             svg.appendChild(debugText);
         }
+
+        // pause button - clickable rect + label
+        const pauseButton = createSvgElement(svg.namespaceURI, "rect", {
+            x: `${Viewport.CANVAS_WIDTH / 2 - 30}`,
+            y: "5",
+            width: "60",
+            height: "24",
+            rx: "4",
+            fill: "#E0E0E0",
+            stroke: "black",
+            "stroke-width": "1",
+            "data-fb-pause-button": "true",
+        });
+        const pauseButtonText = createSvgElement(svg.namespaceURI, "text", {
+            x: `${Viewport.CANVAS_WIDTH / 2}`,
+            y: "21",
+            "text-anchor": "middle",
+            "font-family": "monospace",
+            "font-size": "12",
+            fill: "balck",
+            "data-fb-pause-button": "true",
+        });
+        pauseButtonText.textContent = s.isPaused ? "Resume" : "Pause";
+        svg.appendChild(pauseButton);
+        svg.appendChild(pauseButtonText);
+
+        // pause overlay
+        if (s.isPaused && !s.gameEnd) {
+            const pausedText = createSvgElement(svg.namespaceURI, "text", {
+                x: `${Viewport.CANVAS_WIDTH / 2}`,
+                y: `${Viewport.CANVAS_HEIGHT / 2}`,
+                "text-anchor": "middle",
+                "font-family": "monospace",
+                "font-size": "24",
+                fill: "black",
+            });
+            pausedText.textContent = "PAUSED"
+            svg.appendChild(pausedText);
+        }
     };
 };
 
 // The following simply runs your main function on window load.  Make sure to leave it in place.
 // You should not need to change this, beware if you are.
 if (typeof window !== "undefined") {
-    state$.subscribe(render());
+    state$().subscribe(render());
 }
     // Observable: wait for first user click
 //     const click$ = fromEvent(document.body, "mousedown").pipe(take(1));
