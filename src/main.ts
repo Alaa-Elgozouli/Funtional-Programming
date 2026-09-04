@@ -12,6 +12,7 @@
  * Document your code!
  */
 
+// import { stat } from "fs";
 import "./style.css";
 
 import {
@@ -58,7 +59,8 @@ type FallingTargetView = Readonly<{
 type GameEvent =
     | Readonly<{ type : "TOGGLE_BIT"; index: number }>
     | Readonly<{ type: "TICK" }>
-    | Readonly<{ type: "RESTART" }>;
+    | Readonly<{ type: "RESTART" }>
+    | Readonly<{ type: "TOGGLE_HINT" }>;
 
 const MIN_SPAWN_DELAY_MS = 3000;
 const MAX_SPAWN_DELAY_MS = 6000;
@@ -86,6 +88,7 @@ type State = Readonly<{
     spawnDelayTicks: number;
     nextTargetId: number;
     ticksElapsed: number;   // tracks how long the game's been running through checking how many tick events have occurred
+    showHint: boolean;
 }>;
 
 const BASE_FALL_SPEED = 3;  // how fast targets fall at the start of the game (tick 0)
@@ -109,7 +112,13 @@ const initialState: State = {
     spawnDelayTicks: randomSpawnDelayTicks(),
     nextTargetId: 0,
     ticksElapsed: 0,
+    showHint: false,
 };
+
+const toggleHint$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
+    filter(event => event.key.toLowerCase() === "h"),
+    map(() => ({ type: "TOGGLE_HINT" as const})),
+);
 
 const keyToggle$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
     filter(event => /^[1-8]$/.test(event.key)),
@@ -129,6 +138,7 @@ const event$: Observable<GameEvent> = merge(
     keyToggle$,
     gameTick$,
     restart$,
+    toggleHint$,
 );
 
 const reduceState = (
@@ -150,6 +160,11 @@ const reduceState = (
                 return {
                     ...initialState,
                     spawnDelayTicks: randomSpawnDelayTicks() };
+
+            case "TOGGLE_HINT":
+                return {
+                    ...state,
+                    showHint: !state.showHint };
         };
     };
 
@@ -388,6 +403,19 @@ const render = (): ((s: State) => void) => {
         scoreText.textContent = `Score: ${s.score}`;
         svg.appendChild(scoreText);
 
+        // hint prompt
+        const hintPrompt = createSvgElement(svg.namespaceURI, "text", {
+            x: "10",
+            y: `${Viewport.CANVAS_HEIGHT - 80}`,
+            "font-family": "monospace",
+            "font-size": "12",
+            fill: "blue",
+        });
+        hintPrompt.textContent = "Press H for hint";
+        svg.appendChild(hintPrompt);
+
+        // hint option
+        if (s.showHint) {
         const debugText = createSvgElement(svg.namespaceURI, "text", {
                 x: "10",
                 y: `${Viewport.CANVAS_HEIGHT - 60}`,
@@ -397,6 +425,7 @@ const render = (): ((s: State) => void) => {
             });
             debugText.textContent = `Current Value: ${digitBankToNumber(s.digitBank)}`;
             svg.appendChild(debugText);
+        }
     };
 };
 
