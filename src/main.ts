@@ -25,6 +25,7 @@ import {
     switchMap,
     take,
     merge,
+    from,
 } from "rxjs";
 
 /** Constants */
@@ -56,14 +57,22 @@ type FallingTargetView = Readonly<{
 
 type GameEvent =
     | Readonly<{ type : "TOGGLE_BIT"; index: number }>
-    | Readonly<{ type: "TICK" }>;
+    | Readonly<{ type: "TICK" }>
+    | Readonly<{ type: "RESTART" }>;
 
 const MIN_SPAWN_DELAY_MS = 1000;
 const MAX_SPAWN_DELAY_MS = 3000;
 
+/**
+ *
+ * @returns
+ */
 const randomSpawnDelayTicks = (): number => {
-        const delayMs = MIN_SPAWN_DELAY_MS + Math.random() * (MAX_SPAWN_DELAY_MS - MIN_SPAWN_DELAY_MS);
-        return Math.ceil(delayMs / Constants.TICK_RATE_MS);
+    // generating a random delay between 1000 and 3000
+    const delayMs = MIN_SPAWN_DELAY_MS + Math.random() * (MAX_SPAWN_DELAY_MS - MIN_SPAWN_DELAY_MS);
+
+    // converts milliseconds into a whole number of ticks
+    return Math.ceil(delayMs / Constants.TICK_RATE_MS);
 }
 
 // State processing
@@ -76,7 +85,20 @@ type State = Readonly<{
     gameEnd: boolean;
     spawnDelayTicks: number;
     nextTargetId: number;
+    ticksElapsed: number;   // tracks how long the game's been running through checking how many tick events have occurred
 }>;
+
+const BASE_FALL_SPEED = 8;  // how fast targets fall at the start of the game (tick 0)
+const SPEED_INCREASE_PER_TICK = 0.02;   // compounds over time gradually, this is the extra pixels-per-tick
+
+/**
+ * A pure function in the form of a constant, takes tickElapsed as an arg and returns a number.
+ * It increases gradually the longer the game has been running. It ensures that speed is always derived fresh from ticksElapsed.
+ * @param tickElapsed: number of ticks since the game has started
+ * @returns current speed
+ */
+const currentFallSpeed = (tickElapsed: number): number =>
+    BASE_FALL_SPEED + tickElapsed * SPEED_INCREASE_PER_TICK;
 
 const initialState: State = {
     digitBank: [0, 0, 0, 0, 0, 0, 0, 0],
@@ -86,6 +108,7 @@ const initialState: State = {
     gameEnd: false,
     spawnDelayTicks: randomSpawnDelayTicks(),
     nextTargetId: 0,
+    ticksElapsed: 0,
 };
 
 const keyToggle$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
@@ -97,9 +120,15 @@ const gameTick$: Observable<GameEvent> = interval(Constants.TICK_RATE_MS).pipe(
     map(() => ({ type: "TICK" as const })),
 );
 
+const restart$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
+    filter(event => event.key.toLowerCase() === "r"),
+    map(() => ({ type: "RESTART" as const })),
+);
+
 const event$: Observable<GameEvent> = merge(
     keyToggle$,
     gameTick$,
+    restart$,
 );
 
 const reduceState = (
@@ -116,18 +145,23 @@ const reduceState = (
                 };
             case "TICK":
                 return tick(state);
-        }
+
+            case "RESTART":
+                return {
+                    ...initialState,
+                    spawnDelayTicks: randomSpawnDelayTicks() };
+        };
     };
 
 export const state$: Observable<State> = event$.pipe(
     scan(reduceState, initialState),
 )
 
-const FALL_SPEED = 15;
 const CHECK_LINE_Y = Viewport.CANVAS_HEIGHT - 50;
 
 const randomTargetValue = (): number => Math.floor(Math.random() * 256);
 
+// converts player's 8-bit to a decimal number
 const digitBankToNumber = (digitBank: DigitBank): number => digitBank.reduce((acc, bit) => acc * 2 + bit, 0);
 
 /**
@@ -143,9 +177,19 @@ const toggleDigit = (
     ): DigitBank =>
         digitBank.map((digit, i) => i === index ? 1 - digit : digit);
 
-const moveAllTargets = (targets: ReadonlyArray<FallingTargetView>): ReadonlyArray<FallingTargetView> => targets.map(t => ({
+/**
+ * It updates the target speed
+ * @param targets
+ * @param speed
+ * @returns
+ */
+const moveAllTargets = (
+    targets: ReadonlyArray<FallingTargetView>,
+    speed: number,
+): ReadonlyArray<FallingTargetView> =>
+    targets.map(t => ({
     ...t,
-    y: t.y + FALL_SPEED }));
+    y: t.y + BASE_FALL_SPEED }));
 
 /**
  * The "lowest" unresolved target is the one furthest down the screen
@@ -157,14 +201,22 @@ const lowestTarget = (targets: ReadonlyArray<FallingTargetView>): FallingTargetV
 );
 
 const resolveIfAtCheckLine = (s: State): State => {
+
+    // finds the lowest target, or undefined if none in play
     const target = lowestTarget(s.allCurrentTargetsInPlay);
 
+    // either there's no target or there's one but hasn't reached check line yet. either way, return state unchanged
     if (target === undefined || target.y < CHECK_LINE_Y) return s;
 
+    // target has reached line, convert the player's 8-bit to a decimal number and compare it against target value
     const correct = digitBankToNumber(s.digitBank) === target.value;
+
+    // build a new array with that specific target removed
     const remaining = s.allCurrentTargetsInPlay.filter(t => t.id !== target.id);
 
-    return correct ? { ...s, allCurrentTargetsInPlay: remaining, score: s.score + 1} : { ...s, gameEnd: true};
+    return correct
+    ? { ...s, allCurrentTargetsInPlay: remaining, score: s.score + 1}
+    : { ...s, gameEnd: true};
 };
 
 const spawnIfDue = (s: State): State =>
@@ -172,16 +224,17 @@ const spawnIfDue = (s: State): State =>
     ? { ...s, spawnDelayTicks: s.spawnDelayTicks - 1}
     : {
     ...s,
+    // append a new target object at the end of the existing array
     allCurrentTargetsInPlay: [
         ...s.allCurrentTargetsInPlay,
         {
             id: s.nextTargetId,
             value: randomTargetValue(),
             x: Math.random() * (Viewport.CANVAS_WIDTH - Target.WIDTH),
-            y: 0,
+            y: 0,   // starts at the top
         },
     ],
-    nextTargetId: s.nextTargetId + 1,
+    nextTargetId: s.nextTargetId + 1,   // to ensure ids never repeat
     spawnDelayTicks: randomSpawnDelayTicks(),
 };
 
@@ -193,7 +246,16 @@ const spawnIfDue = (s: State): State =>
  */
 const tick = (s: State): State => {
     if (s.gameEnd) return s;
-    const moved = { ...s, allCurrentTargetsInPlay: moveAllTargets(s.allCurrentTargetsInPlay) };
+
+    const speed = currentFallSpeed(s.ticksElapsed);
+
+    // build a new state object and overrides two fields
+    // moved is the state after targets have fallen, before checking if any reached check line or any spawned a new one
+    const moved = {
+        ...s,
+        allCurrentTargetsInPlay: moveAllTargets(s.allCurrentTargetsInPlay, speed),
+        ticksElapsed: s.ticksElapsed + 1
+    };
     const resolved = resolveIfAtCheckLine(moved);
     return spawnIfDue(resolved);
 };
