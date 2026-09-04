@@ -60,15 +60,15 @@ type GameEvent =
     | Readonly<{ type: "TICK" }>
     | Readonly<{ type: "RESTART" }>;
 
-const MIN_SPAWN_DELAY_MS = 1000;
-const MAX_SPAWN_DELAY_MS = 3000;
+const MIN_SPAWN_DELAY_MS = 3000;
+const MAX_SPAWN_DELAY_MS = 6000;
 
 /**
  *
  * @returns
  */
 const randomSpawnDelayTicks = (): number => {
-    // generating a random delay between 1000 and 3000
+    // generating a random delay between 3000 and 6000
     const delayMs = MIN_SPAWN_DELAY_MS + Math.random() * (MAX_SPAWN_DELAY_MS - MIN_SPAWN_DELAY_MS);
 
     // converts milliseconds into a whole number of ticks
@@ -88,7 +88,7 @@ type State = Readonly<{
     ticksElapsed: number;   // tracks how long the game's been running through checking how many tick events have occurred
 }>;
 
-const BASE_FALL_SPEED = 8;  // how fast targets fall at the start of the game (tick 0)
+const BASE_FALL_SPEED = 3;  // how fast targets fall at the start of the game (tick 0)
 const SPEED_INCREASE_PER_TICK = 0.02;   // compounds over time gradually, this is the extra pixels-per-tick
 
 /**
@@ -189,7 +189,7 @@ const moveAllTargets = (
 ): ReadonlyArray<FallingTargetView> =>
     targets.map(t => ({
     ...t,
-    y: t.y + BASE_FALL_SPEED }));
+    y: t.y + speed }));
 
 /**
  * The "lowest" unresolved target is the one furthest down the screen
@@ -376,6 +376,27 @@ const render = (): ((s: State) => void) => {
             svg.appendChild(box);
             svg.appendChild(bitText);
         });
+
+        // score display
+        const scoreText = createSvgElement(svg.namespaceURI, "text", {
+            x: "10",
+            y: "20",
+            "font-family": "monospace",
+            "font-size": "16",
+            fill: "black",
+        });
+        scoreText.textContent = `Score: ${s.score}`;
+        svg.appendChild(scoreText);
+
+        const debugText = createSvgElement(svg.namespaceURI, "text", {
+                x: "10",
+                y: `${Viewport.CANVAS_HEIGHT - 60}`,
+                "font-family": "monospace",
+                "font-size": "14",
+                fill: "blue",
+            });
+            debugText.textContent = `Current Value: ${digitBankToNumber(s.digitBank)}`;
+            svg.appendChild(debugText);
     };
 };
 
