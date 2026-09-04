@@ -134,11 +134,20 @@ const restart$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keyd
     map(() => ({ type: "RESTART" as const })),
 );
 
+const digitClick$: Observable<GameEvent> = fromEvent<MouseEvent>(document.querySelector("#svgCanvas") as SVGSVGElement, "click",).pipe(     // listens for click event on the <svg> element itself rather than individual boxes
+    // click on box gives string from "0" to "7" (index wise), otherwise it'll be null
+    map(event => (event.target as SVGElement).getAttribute("data-fb-bit-index")),
+    filter((index): index is string => index != null),
+    //converts the string into a real `GameEvent`
+    map(index => ({ type: "TOGGLE_BIT" as const, index: Number(index) })),
+);
+
 const event$: Observable<GameEvent> = merge(
     keyToggle$,
     gameTick$,
     restart$,
     toggleHint$,
+    digitClick$,
 );
 
 const reduceState = (
@@ -274,7 +283,6 @@ const tick = (s: State): State => {
     const resolved = resolveIfAtCheckLine(moved);
     return spawnIfDue(resolved);
 };
-// Rendering (side effects)
 
 /**
  * Brings an SVG element to the foreground.
