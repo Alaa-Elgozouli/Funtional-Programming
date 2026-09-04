@@ -12,6 +12,8 @@
  * Document your code!
  */
 
+// men with hats
+
 // import { stat } from "fs";
 import "./style.css";
 
@@ -62,15 +64,15 @@ type GameEvent =
     | Readonly<{ type: "RESTART" }>
     | Readonly<{ type: "TOGGLE_HINT" }>;
 
-const MIN_SPAWN_DELAY_MS = 3000;
-const MAX_SPAWN_DELAY_MS = 6000;
+const MIN_SPAWN_DELAY_MS = 1000;
+const MAX_SPAWN_DELAY_MS = 3000;
 
 /**
  *
  * @returns
  */
 const randomSpawnDelayTicks = (): number => {
-    // generating a random delay between 3000 and 6000
+    // generating a random delay between 1000 and 3000
     const delayMs = MIN_SPAWN_DELAY_MS + Math.random() * (MAX_SPAWN_DELAY_MS - MIN_SPAWN_DELAY_MS);
 
     // converts milliseconds into a whole number of ticks
@@ -224,6 +226,17 @@ const lowestTarget = (targets: ReadonlyArray<FallingTargetView>): FallingTargetV
     (lowest, t) => (lowest === undefined || t.y > lowest.y ? t : lowest), undefined,
 );
 
+/**
+ * Handles a missed target, loses a life and ends the game only once out of lives
+ */
+const resolveMiss = (s: State, remaining: ReadonlyArray<FallingTargetView>): State => {
+    const healthRemaining = s.healthReserve - 1;
+
+    return healthRemaining <= 0
+    ? {...s, allCurrentTargetsInPlay: remaining, healthReserve: 0, gameEnd: true}
+    : {...s, allCurrentTargetsInPlay: remaining, healthReserve: healthRemaining};
+}
+
 const resolveIfAtCheckLine = (s: State): State => {
 
     // finds the lowest target, or undefined if none in play
@@ -240,7 +253,7 @@ const resolveIfAtCheckLine = (s: State): State => {
 
     return correct
     ? { ...s, allCurrentTargetsInPlay: remaining, score: s.score + 1}
-    : { ...s, gameEnd: true};
+    : resolveMiss(s, remaining);
 };
 
 const spawnIfDue = (s: State): State =>
@@ -383,7 +396,7 @@ const render = (): ((s: State) => void) => {
                 y: `${Viewport.CANVAS_HEIGHT - 50}`,
                 width: `${digitWidth - 8}`,
                 height: "40",
-                fill: bit === 1 ? "#a5d6a7" : "#ef9a9a",
+                fill: bit === 1 ? "#A5D6A7" : "#EF9A9A",
                 stroke: "black",
                 "stroke-width": "2",
                 "data-fb-bit-index": `${i}`,
@@ -410,6 +423,17 @@ const render = (): ((s: State) => void) => {
         });
         scoreText.textContent = `Score: ${s.score}`;
         svg.appendChild(scoreText);
+
+        // health display
+        const livesText = createSvgElement(svg.namespaceURI, "text", {
+            x: "10",
+            y: "40",
+            "font-family": "monospace",
+            "font-size": "16",
+            fill: "black",
+        });
+        livesText.textContent = `Lives: ${s.healthReserve}`;
+        svg.appendChild(livesText);
 
         //restart instructions
         const restartPrompt = createSvgElement(svg.namespaceURI, "text", {
