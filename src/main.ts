@@ -64,11 +64,20 @@ type GameEvent =
     | Readonly<{ type: "TICK" }>
     | Readonly<{ type: "RESTART" }>
     | Readonly<{ type: "TOGGLE_HINT" }>
-    | Readonly<{ type: "TOGGLE_PAUSE" }>;
+    | Readonly<{ type: "TOGGLE_PAUSE" }>
+    | Readonly<{ type: "SET_BASE"; base: number }>;
 
 const MIN_SPAWN_DELAY_MS = 1000;
 const MAX_SPAWN_DELAY_MS = 3000;
 
+const BASE_OPTIONS = [2, 8, 16] as const;
+
+const baseSlider$: Observable<GameEvent> = fromEvent<Event>(document.querySelector("#baseSlider") as HTMLInputElement, "input").pipe(
+    map(event => {
+        const sliderIndex = Number((event.target as HTMLInputElement).value);
+        return { type: "SET_BASE" as const, base: BASE_OPTIONS[sliderIndex]};
+    })
+)
 /**
  *
  * @returns
@@ -94,6 +103,7 @@ type State = Readonly<{
     ticksElapsed: number;   // tracks how long the game's been running through checking how many tick events have occurred
     showHint: boolean;
     isPaused: boolean;
+    displayBase: number;    // affects only how target values are shown
 }>;
 
 const BASE_FALL_SPEED = 3;  // how fast targets fall at the start of the game (tick 0)
@@ -119,6 +129,7 @@ const initialState: State = {
     ticksElapsed: 0,
     showHint: false,
     isPaused: false,
+    displayBase: 16,
 };
 
 const toggleHint$: Observable<GameEvent> = fromEvent<KeyboardEvent>(document, "keydown").pipe(
@@ -167,6 +178,7 @@ const event$: Observable<GameEvent> = merge(
     digitClick$,
     pauseButtonClick$,
     togglePauseKey$,
+    baseSlider$,
 );
 
 const reduceState = (
@@ -198,6 +210,12 @@ const reduceState = (
                 return {
                     ...state,
                     isPaused: !state.isPaused
+                };
+
+            case "SET_BASE":
+                return {
+                    ...state,
+                    displayBase: event.base
                 };
         };
     };
@@ -405,7 +423,7 @@ const render = (): ((s: State) => void) => {
             "font-family": "monospace",
             fill: "black",
         });
-        targetText.textContent = target.value.toString(16).toUpperCase();
+        targetText.textContent = target.value.toString(s.displayBase).toUpperCase();
         svg.appendChild(rect);
         svg.appendChild(targetText);
     });
@@ -463,18 +481,28 @@ const render = (): ((s: State) => void) => {
             y: "20",
             "text-anchor": "end",   // text grows leftward from x
             "font-family": "monospace",
-            "font-size": "12",
+            "font-size": "14",
             fill: "blue",
         });
         restartPrompt.textContent = "Press R to restart";
         svg.appendChild(restartPrompt);
+
+        const baseLabel = createSvgElement(svg.namespaceURI, "text", {
+            x: "10",
+            y: "60",
+            "font-family": "monospace",
+            "font-size": "13",
+            fill: "black",
+        });
+        baseLabel.textContent = `Base: ${s.displayBase}`;
+        svg.appendChild(baseLabel);
 
         // hint prompt
         const hintPrompt = createSvgElement(svg.namespaceURI, "text", {
             x: "10",
             y: `${Viewport.CANVAS_HEIGHT - 80}`,
             "font-family": "monospace",
-            "font-size": "12",
+            "font-size": "14",
             fill: "blue",
         });
         hintPrompt.textContent = "Press H for hint";
