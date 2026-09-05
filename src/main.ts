@@ -12,8 +12,6 @@
  * Document your code!
  */
 
-// men with hats
-
 import "./style.css";
 
 import {
