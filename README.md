@@ -29,6 +29,26 @@ Flippy Bit is a reaction game built with RxJS and Functional Reactive Programmin
 - Health/lives replace an instant game-over on the first miss, giving the player some room for error rather than ending the run on a single mistake.
 - State is managed entirely through a single scan(reduceState, initialState) fold over a merged stream of all input sources (keyboard, mouse, game clock). Every game update, whatever triggered it, goes through the same pure reduceState function, keeping all state transitions centralized and side-effect-free. Rendering is the only place side effects (DOM mutation) occur.
 
+### A note on `if` statements
+
+The codebase uses four `if` statements, deliberately kept rather than
+forced into ternaries:
+
+- Two guard clauses in pure functions (`tick`, `resolveIfAtCheckLine`)
+  that handle a trivial early-exit case before the main logic runs.
+- Two conditional side-effect gates in `render` (`s.showHint`,
+  `s.isPaused && !s.gameEnd`) that decide whether to draw an optional
+  UI element.
+
+None of these select between two values to return - they either exit
+early or conditionally perform a DOM side effect - so a ternary isn't
+the right tool for them. Rewriting them as ternaries was tested and
+would require either duplicating logic or wrapping statements in an
+immediately-invoked function expression purely to satisfy ternary
+syntax, which made the code harder to read without any gain in
+purity or correctness. They were left as `if` statements as a
+deliberate readability choice.
+
 -----
 
 ## Usage
