@@ -1,10 +1,8 @@
-# Assignment 1
-
-## Flippy Bit Game
+# Flippy Bit Game
 
 Flippy Bit is a reaction game built with RxJS and Functional Reactive Programming. Numeric targets fall from the top of the screen toward a check line; the player must set an 8-bit binary answer that matches each target's value before it arrives.
 
-### Gameplay
+## Gameplay
 
 - Targets spawn continuously, each at a random value and a random horizontal position, with a random 1–3 second delay between spawns.
 - More than one target can be falling at once. Only the lowest (closest to the check line) target is ever compared against the player's answer. Targets above it are ignored until it's resolved.
@@ -12,7 +10,7 @@ Flippy Bit is a reaction game built with RxJS and Functional Reactive Programmin
 - If the lowest target reaches the check line and the player's answer matches its value, it's cleared and the score increases by one. If it doesn't match, a life is lost (starting from 3); the game ends once all lives are gone.
 - Fall speed starts at a fixed base speed and increases gradually the longer the game runs, so difficulty ramps up over a session rather than staying constant.
 
-### Controls
+## Controls
 
 | Input                        | Effect                                                        |
 |-------------------------------|----------------------------------------------------------------|
@@ -22,14 +20,14 @@ Flippy Bit is a reaction game built with RxJS and Functional Reactive Programmin
 | `H`                           | Toggle a hint showing the current decimal value of your answer |
 | Base slider                  | Switch the falling targets' displayed number base (binary/octal/hex) |
 
-### Design decisions
+## Design decisions
 
 - Pause freezes target movement and spawning, but digit toggling still works while paused, so the player can adjust their answer while thinking, rather than the pause being a total input freeze.
 - Base display is a purely visual setting. Internally, every target's value and the player's answer are always compared as plain numbers regardless of display base.  Switching base mid-game only changes how the number is printed.
 - Health/lives replace an instant game-over on the first miss, giving the player some room for error rather than ending the run on a single mistake.
 - State is managed entirely through a single scan(reduceState, initialState) fold over a merged stream of all input sources (keyboard, mouse, game clock). Every game update, whatever triggered it, goes through the same pure reduceState function, keeping all state transitions centralized and side-effect-free. Rendering is the only place side effects (DOM mutation) occur.
 
-### A note on `if` statements
+## A note on `if` statements
 
 The codebase uses four `if` statements, deliberately kept rather than
 forced into ternaries:
